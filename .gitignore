@@ -1,0 +1,19 @@
+# Python & Environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Environment Variables (Sensitive)
+.env
+.streamlit/secrets.toml
+
+# IDEs
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/
+!.streamlit/config.toml
+!.streamlit/secrets.toml.example
