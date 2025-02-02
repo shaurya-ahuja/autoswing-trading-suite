@@ -35,10 +35,17 @@ TESTNET_WS_URL = "wss://testnet.binance.vision/ws"
 MAINNET_BASE_URL = "https://api.binance.com"
 MAINNET_WS_URL = "wss://stream.binance.com:9443/ws"
 
+# Binance.US API endpoints (For US Users)
+BINANCE_US_BASE_URL = "https://api.binance.us"
+BINANCE_US_WS_URL = "wss://stream.binance.us:9443/ws"
+
 # Operation Mode
 # Set to 'True' to use Mainnet Data (Real Prices)
 # Set to 'False' to use Testnet Data
 USE_MAINNET_DATA = False 
+
+# Set to 'True' if using Binance.US
+USE_BINANCE_US = False 
 
 # Trading Mode
 # ALWAYS False for this dashboard version to prevent real money loss

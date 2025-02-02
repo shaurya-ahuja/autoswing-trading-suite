@@ -169,11 +169,14 @@ def init_session_state():
         api_key = None
         api_secret = None
         use_mainnet = False
+        use_binance_us = False
         
         try:
-            api_key = st.secrets.get("binance", {}).get("api_key")
-            api_secret = st.secrets.get("binance", {}).get("api_secret")
-            use_mainnet = st.secrets.get("binance", {}).get("product_mode", False)
+            secrets = st.secrets.get("binance", {})
+            api_key = secrets.get("api_key")
+            api_secret = secrets.get("api_secret")
+            use_mainnet = secrets.get("product_mode", False)
+            use_binance_us = secrets.get("use_binance_us", False)
         except Exception:
             pass
         
@@ -182,8 +185,9 @@ def init_session_state():
             api_secret = os.environ.get("BINANCE_TESTNET_API_SECRET")
             # Default to false from env if not set
             use_mainnet = os.environ.get("USE_MAINNET_DATA", "False").lower() == "true"
+            use_binance_us = os.environ.get("USE_BINANCE_US", "False").lower() == "true"
         
-        st.session_state.binance_client = BinanceTestnetClient(api_key, api_secret, use_mainnet)
+        st.session_state.binance_client = BinanceTestnetClient(api_key, api_secret, use_mainnet, use_binance_us)
     
     if 'last_price' not in st.session_state:
         st.session_state.last_price = None
@@ -204,10 +208,26 @@ def render_header():
         st.caption("Live Grid Trading Dashboard")
     
     with col2:
+        client = st.session_state.binance_client
+        is_live = getattr(client, 'use_mainnet', False)
+        status = getattr(client, 'connection_status', 'UNKNOWN')
+        error = getattr(client, 'last_error', None)
+
+        if is_live:
+            if status == "CONNECTED":
+                badge_html = '<span class="sandbox-badge" style="background: linear-gradient(135deg, #00C851 0%, #007E33 100%);">🟢 LIVE DATA</span>'
+            elif status == "RESTRICTED":
+                badge_html = f'<span class="sandbox-badge" style="background: #FF8800;">⚠️ RESTRICTED</span>'
+                st.toast(f"Connection Issue: {error}", icon="⚠️")
+            else:
+                badge_html = f'<span class="sandbox-badge" style="background: #CC0000;">🔴 ERROR</span>'
+                if error:
+                    st.toast(f"Connection Error: {error}", icon="❌")
+        else:
+            badge_html = '<span class="sandbox-badge">🔒 SANDBOX MODE</span>'
+
         st.markdown(
-            '<div style="text-align: right; padding-top: 0.5rem;">'
-            '<span class="sandbox-badge">🔒 SANDBOX MODE</span>'
-            '</div>',
+            f'<div style="text-align: right; padding-top: 0.5rem;">{badge_html}</div>',
             unsafe_allow_html=True
         )
 
@@ -243,20 +263,22 @@ def render_sidebar():
         # Buy threshold slider
         buy_threshold = st.slider(
             "Buy Threshold (%)",
-            min_value=-10.0,
-            max_value=-0.5,
-            value=st.session_state.trader.buy_threshold,
-            step=0.5,
+            min_value=-5.0,
+            max_value=-0.01,
+            value=max(st.session_state.trader.buy_threshold, -5.0), # Ensure value is within range
+            step=0.01,
+            format="%.2f",
             help="Price must drop this % below reference to trigger a buy"
         )
         
         # Sell threshold slider
         sell_threshold = st.slider(
             "Sell Threshold (%)",
-            min_value=0.5,
-            max_value=10.0,
-            value=st.session_state.trader.sell_threshold,
-            step=0.5,
+            min_value=0.01,
+            max_value=5.0,
+            value=min(st.session_state.trader.sell_threshold, 5.0), # Ensure value is within range
+            step=0.01,
+            format="%.2f",
             help="Price must rise this % above reference to trigger a sell"
         )
         

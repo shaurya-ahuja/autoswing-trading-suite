@@ -8,6 +8,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Optional, Dict, List
 import requests
+import config
 
 try:
     from binance.client import Client
@@ -22,10 +23,10 @@ except ImportError:
 class BinanceClientWrapper:
     """
     Binance API client wrapper for fetching real-time price data.
-    Supports both Testnet (Simulated) and Mainnet (Real) data.
+    Supports Testnet, Mainnet (Global), and Binance.US.
     """
     
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, use_mainnet: bool = False):
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, use_mainnet: bool = False, use_binance_us: bool = False):
         """
         Initialize the Binance client.
         
@@ -33,12 +34,24 @@ class BinanceClientWrapper:
             api_key: Binance API key
             api_secret: Binance API secret
             use_mainnet: If True, connects to Mainnet. If False, connects to Testnet.
+            use_binance_us: If True and use_mainnet is True, connects to Binance.US.
         """
         self.api_key = api_key
         self.api_secret = api_secret
         self.use_mainnet = use_mainnet
-        self.base_url = config.MAINNET_BASE_URL if use_mainnet else config.TESTNET_BASE_URL
+        self.use_binance_us = use_binance_us
+        
+        # Determine Base URL
+        if not use_mainnet:
+            self.base_url = config.TESTNET_BASE_URL
+        elif use_binance_us:
+            self.base_url = config.BINANCE_US_BASE_URL
+        else:
+            self.base_url = config.MAINNET_BASE_URL
+            
         self.client = None
+        self.connection_status = "INITIALIZING"
+        self.last_error = None
         
         # Initialize python-binance client if keys provided and library available
         if BINANCE_AVAILABLE and api_key and api_secret:
@@ -46,11 +59,21 @@ class BinanceClientWrapper:
                 self.client = Client(
                     api_key=api_key,
                     api_secret=api_secret,
-                    testnet=not use_mainnet
+                    testnet=not use_mainnet,
+                    tld='us' if use_binance_us and use_mainnet else 'com'
                 )
+                self.connection_status = "CONNECTED"
             except Exception as e:
+                self.last_error = f"Init Error: {str(e)}"
+                self.connection_status = "ERROR"
                 print(f"Warning: Could not initialize Binance client: {e}")
                 self.client = None
+        else:
+            if not BINANCE_AVAILABLE:
+                self.last_error = "Library 'python-binance' missing"
+            elif not api_key:
+                self.last_error = "API Key missing"
+            self.connection_status = "ERROR"
     
     def get_current_price(self, symbol: str = "BTCUSDT") -> float:
         """
@@ -74,12 +97,17 @@ class BinanceClientWrapper:
                     timeout=10
                 )
                 if response.status_code == 451: # Geo-restriction
+                     self.last_error = "Geo-Restricted (451)"
+                     self.connection_status = "RESTRICTED"
                      print("Warning: Geo-restricted. Using simulated data.")
                      return self._generate_simulated_price()
                 
                 response.raise_for_status()
+                self.connection_status = "CONNECTED" # Success via REST
                 return float(response.json()['price'])
         except Exception as e:
+            self.last_error = f"Fetch Error: {str(e)}"
+            self.connection_status = "ERROR"
             print(f"Error fetching price: {e}")
             return self._generate_simulated_price()
     
@@ -190,6 +218,62 @@ class BinanceClientWrapper:
     def _generate_simulated_price(self) -> float:
         """Generate a simulated price for fallback."""
         return 42000.0 + (hash(str(datetime.now())) % 2000 - 1000)
+
+    def _generate_demo_klines(self, limit: int) -> pd.DataFrame:
+        """Generate demo candlestick data when API is unavailable."""
+        import random
+        from datetime import timedelta
+        import math
+        
+        base_price = 42000.0
+        now = datetime.now()
+        
+        # Seed for reproducibility within the minute
+        random.seed(int(now.timestamp()) % 1000)
+        
+        # Generate times and prices using pure Python
+        time_list = []
+        open_list = []
+        high_list = []
+        low_list = []
+        close_list = []
+        volume_list = []
+        
+        current_price = base_price
+        
+        for i in range(limit):
+            # Time for this candle
+            t = now - timedelta(minutes=limit - i - 1)
+            
+            # Random walk for price
+            change = random.gauss(0, 0.001)
+            current_price = current_price * math.exp(change)
+            
+            # Generate OHLCV data
+            volatility = current_price * 0.002
+            open_p = current_price + random.gauss(0, volatility)
+            close_p = current_price + random.gauss(0, volatility)
+            high_p = max(open_p, close_p) + abs(random.gauss(0, volatility))
+            low_p = min(open_p, close_p) - abs(random.gauss(0, volatility))
+            volume = random.uniform(10, 100)
+            
+            time_list.append(t)
+            open_list.append(open_p)
+            high_list.append(high_p)
+            low_list.append(low_p)
+            close_list.append(close_p)
+            volume_list.append(volume)
+        
+        # Create DataFrame column by column
+        df = pd.DataFrame()
+        df['time'] = time_list
+        df['open'] = open_list
+        df['high'] = high_list
+        df['low'] = low_list
+        df['close'] = close_list
+        df['volume'] = volume_list
+        
+        return df
 
     def test_connection(self) -> bool:
         """Test if the API connection is working."""

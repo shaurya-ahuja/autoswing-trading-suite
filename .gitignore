@@ -16,4 +16,4 @@ __pycache__/
 # Streamlit
 .streamlit/
 !.streamlit/config.toml
-!.streamlit/secrets.toml.example
+!swinggrid/.streamlit/secrets.toml.example
