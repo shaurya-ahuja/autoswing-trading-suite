@@ -4,7 +4,7 @@ A real-time market data pipeline and grid-strategy backtester. Ingests live Bina
 
 Live demo: [autoswing.streamlit.app](https://autoswing.streamlit.app/)
 
-![Dashboard Preview](swinggrid/assets/mockups/dashboard_preview_v2.webp)
+![Dashboard Preview](AutoSwing-Dashboard.png)
 
 ---
 
